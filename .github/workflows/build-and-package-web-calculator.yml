@@ -201,29 +201,3 @@ jobs:
           - For support, create an issue in the repository
         draft: false
         prerelease: false
-
-    - name: Build summary
-      run: |
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## 🎉 Web Calculator Build Completed Successfully!"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### простран Application Details"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Project**: ASP.NET Web Forms Calculator"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Framework**: .NET Framework 4.8"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Version**: $env:VERSION"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Build Configuration**: ${{ env.BUILD_CONFIGURATION }}"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Deployment Package**: ${{ env.PACKAGE_NAME }}"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📦 Available Downloads"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **GitHub Actions Artifacts**: Available for 30 days"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **IIS Deployment Package**: Ready-to-deploy ZIP file (${{ env.PACKAGE_NAME }})"
-        if ($env:GITHUB_REF -match 'refs/tags/') {
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **GitHub Releases**: Permanent release package at ${{ env.PACKAGE_NAME }}"
-        }
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 🚀 IIS Deployment Ready!"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "The deployment package includes:"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Compiled binaries and dependencies"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Optimized production Web.config"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Deployment instructions (README.txt)"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Static content (CSS, images, etc.)"
-      shell: powershell
