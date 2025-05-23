@@ -12,6 +12,7 @@ on:
     paths:
       - 'WebCalculator/**'
       - '.github/workflows/build-web-calculator.yml'
+  workflow_dispatch:
 
 env:
   DOTNET_FRAMEWORK_VERSION: '4.8'
