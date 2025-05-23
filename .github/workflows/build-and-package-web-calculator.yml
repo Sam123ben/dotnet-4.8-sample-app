@@ -6,15 +6,14 @@ on:
     tags: [ 'v*' ]
     paths:
       - 'WebCalculator/**'
-      - '.github/workflows/build-web-calculator.yml'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main ]
     paths:
       - 'WebCalculator/**'
-      - '.github/workflows/build-web-calculator.yml'
+      - '.github/workflows/**'
 
 env:
-  DOTNET_FRAMEWORK_VERSION: '4.8'
   BUILD_CONFIGURATION: 'Release'
   PROJECT_NAME: 'WebCalculator'
   PROJECT_FOLDER: 'WebCalculator'
@@ -37,13 +36,13 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
 
-    - name: Check if WebCalculator folder exists
+    - name: Verify project structure
       run: |
         if (Test-Path "${{ env.PROJECT_FOLDER }}") {
-          echo "✅ WebCalculator folder found"
-          dir "${{ env.PROJECT_FOLDER }}"
+          Write-Host "✅ Project folder found"
+          Get-ChildItem "${{ env.PROJECT_FOLDER }}" | Write-Host
         } else {
-          echo "❌ WebCalculator folder not found"
+          Write-Host "❌ Project folder not found"
           exit 1
         }
       shell: powershell
@@ -52,302 +51,133 @@ jobs:
       run: |
         cd "${{ env.PROJECT_FOLDER }}"
         if (Test-Path "packages.config") {
-          nuget restore packages.config -PackagesDirectory packages
-          echo "✅ NuGet packages restored"
-        } else {
-          echo "No packages.config found - skipping NuGet restore"
+          nuget restore packages.config
+          Write-Host "✅ NuGet restore completed"
         }
       shell: powershell
-      continue-on-error: true
 
-    - name: Build web application
+    - name: Build application
       run: |
         cd "${{ env.PROJECT_FOLDER }}"
-        msbuild "${{ env.PROJECT_NAME }}.csproj" /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:OutputPath="bin\"
+        msbuild "${{ env.PROJECT_NAME }}.csproj" /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU"
       shell: powershell
 
-    - name: Verify build output
+    - name: Verify build
       run: |
         cd "${{ env.PROJECT_FOLDER }}"
-        echo "Checking build output..."
-        
         if (Test-Path "bin") {
-          echo "✅ bin folder found"
-          dir "bin"
+          Write-Host "✅ Build successful - bin folder created"
+          Get-ChildItem "bin" -Recurse | Write-Host
         } else {
-          echo "❌ bin folder not found"
-        }
-        
-        # Check for key files
-        $keyFiles = @("Default.aspx", "Web.config", "Global.asax")
-        foreach ($file in $keyFiles) {
-          if (Test-Path $file) {
-            echo "✅ $file found"
-          } else {
-            echo "❌ $file missing"
-          }
+          Write-Host "❌ Build failed - no bin folder"
+          exit 1
         }
       shell: powershell
 
     - name: Create deployment package
       run: |
-        # Create deployment directory
-        New-Item -ItemType Directory -Force -Path "deployment"
+        New-Item -ItemType Directory -Force -Path "deploy"
         
-        cd "${{ env.PROJECT_FOLDER }}"
-        
-        # Copy all web files
-        Copy-Item "*.aspx" -Destination "..\deployment\" -ErrorAction SilentlyContinue
-        Copy-Item "*.asax" -Destination "..\deployment\" -ErrorAction SilentlyContinue  
-        Copy-Item "*.config" -Destination "..\deployment\" -ErrorAction SilentlyContinue
-        Copy-Item "favicon.ico" -Destination "..\deployment\" -ErrorAction SilentlyContinue
-        
-        # Copy Content folder
-        if (Test-Path "Content") {
-          Copy-Item "Content" -Destination "..\deployment\" -Recurse -Force
-        }
+        # Copy main files
+        Copy-Item "${{ env.PROJECT_FOLDER }}\*.aspx" "deploy\" -ErrorAction Continue
+        Copy-Item "${{ env.PROJECT_FOLDER }}\*.asax" "deploy\" -ErrorAction Continue
+        Copy-Item "${{ env.PROJECT_FOLDER }}\Web.config" "deploy\" -ErrorAction Continue
         
         # Copy bin folder
-        if (Test-Path "bin") {
-          Copy-Item "bin" -Destination "..\deployment\" -Recurse -Force
+        if (Test-Path "${{ env.PROJECT_FOLDER }}\bin") {
+          Copy-Item "${{ env.PROJECT_FOLDER }}\bin" "deploy\" -Recurse -Force
         }
         
-        # Copy App_Data if exists
-        if (Test-Path "App_Data") {
-          Copy-Item "App_Data" -Destination "..\deployment\" -Recurse -Force
+        # Copy Content folder
+        if (Test-Path "${{ env.PROJECT_FOLDER }}\Content") {
+          Copy-Item "${{ env.PROJECT_FOLDER }}\Content" "deploy\" -Recurse -Force
         }
         
-        cd ..
-        echo "Deployment package contents:"
-        dir deployment -Recurse
+        Write-Host "✅ Deployment package created"
+        Get-ChildItem "deploy" -Recurse | Write-Host
       shell: powershell
 
-    - name: Create version info
+    - name: Set version
       run: |
-        $version = if ($env:GITHUB_REF -match 'refs/tags/(.*)') { $matches[1] } else { "dev-$($env:GITHUB_SHA.Substring(0,7))" }
-        $buildDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
-        $versionInfo = @"
-        Web Calculator - Deployment Information
-        ======================================
-        Version: $version
-        Build Date: $buildDate
-        Commit: $env:GITHUB_SHA
-        Branch: $env:GITHUB_REF_NAME
-        Built by: GitHub Actions
-        Target Framework: .NET Framework ${{ env.DOTNET_FRAMEWORK_VERSION }}
-        
-        IIS Deployment Instructions:
-        ===========================
-        1. Extract this package to your IIS web directory (e.g., C:\inetpub\wwwroot\calculator)
-        2. Create a new IIS Application or Virtual Directory pointing to the extracted folder
-        3. Ensure the Application Pool is set to .NET Framework v4.0 (Integrated Pipeline)
-        4. Grant IIS_IUSRS read permissions to the application folder
-        5. Browse to http://yourserver/calculator/Default.aspx
-        
-        Requirements:
-        - Windows Server with IIS
-        - .NET Framework 4.8 or later
-        - ASP.NET Web Forms support enabled in IIS
-        "@
-        
-        $versionInfo | Out-File -FilePath "deployment\DEPLOYMENT_INFO.txt" -Encoding UTF8
-        echo "VERSION_TAG=$version" >> $env:GITHUB_ENV
+        if ($env:GITHUB_REF -match 'refs/tags/(.*)') {
+          $version = $matches[1]
+        } else {
+          $version = "dev-$($env:GITHUB_SHA.Substring(0,7))"
+        }
+        echo "VERSION=$version" >> $env:GITHUB_ENV
       shell: powershell
 
-    - name: Create IIS web.config optimization
+    - name: Create deployment info
       run: |
-        $webConfigContent = @'
-        <?xml version="1.0" encoding="utf-8"?>
-        <configuration>
-          <system.web>
-            <compilation debug="false" targetFramework="4.8" />
-            <httpRuntime targetFramework="4.8" enableVersionHeader="false" />
-            <pages controlRenderingCompatibilityVersion="4.0" />
-            <sessionState mode="InProc" timeout="20" />
-            <customErrors mode="RemoteOnly" defaultRedirect="~/Error.aspx" />
-            <authentication mode="None" />
-            <globalization culture="en-US" uiCulture="en-US" />
-          </system.web>
-          <system.webServer>
-            <defaultDocument>
-              <files>
-                <clear />
-                <add value="Default.aspx" />
-              </files>
-            </defaultDocument>
-            <httpCompression directory="%SystemDrive%\inetpub\temp\IIS Temporary Compressed Files">
-              <scheme name="gzip" dll="%Windir%\system32\inetsrv\gzip.dll" />
-              <dynamicTypes>
-                <add mimeType="text/*" enabled="true" />
-                <add mimeType="application/javascript" enabled="true" />
-                <add mimeType="application/json" enabled="true" />
-              </dynamicTypes>
-              <staticTypes>
-                <add mimeType="text/*" enabled="true" />
-                <add mimeType="application/javascript" enabled="true" />
-              </staticTypes>
-            </httpCompression>
-            <httpProtocol>
-              <customHeaders>
-                <remove name="Server" />
-                <add name="X-Content-Type-Options" value="nosniff" />
-                <add name="X-Frame-Options" value="SAMEORIGIN" />
-                <add name="X-XSS-Protection" value="1; mode=block" />
-              </customHeaders>
-            </httpProtocol>
-          </system.webServer>
-          <appSettings>
-            <add key="ApplicationName" value="Simple Web Calculator" />
-            <add key="Version" value="$($env:VERSION_TAG)" />
-          </appSettings>
-        </configuration>
-        '@
-        
-        $webConfigContent | Out-File -FilePath "deployment\Web.config" -Encoding UTF8 -Force
-        echo "✅ Production web.config created"
+        $info = @"
+Web Calculator Deployment Package
+=================================
+Version: $env:VERSION
+Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+Commit: $env:GITHUB_SHA
+
+IIS Deployment:
+1. Extract this package to your web directory
+2. Create IIS Application pointing to the folder
+3. Set Application Pool to .NET Framework 4.8
+4. Browse to Default.aspx
+
+Requirements:
+- Windows Server with IIS
+- .NET Framework 4.8
+- ASP.NET enabled
+"@
+        $info | Out-File "deploy\README.txt" -Encoding UTF8
       shell: powershell
 
-    - name: Create deployment ZIP
+    - name: Create ZIP package
       run: |
-        $zipName = "${{ env.PROJECT_NAME }}-$env:VERSION_TAG.zip"
-        Compress-Archive -Path "deployment\*" -DestinationPath $zipName -CompressionLevel Optimal
-        echo "Created deployment package: $zipName"
+        $zipName = "${{ env.PROJECT_NAME }}-$env:VERSION.zip"
+        Compress-Archive -Path "deploy\*" -DestinationPath $zipName
         echo "PACKAGE_NAME=$zipName" >> $env:GITHUB_ENV
-        
-        # Get file size for display
-        $fileSize = [math]::Round((Get-Item $zipName).length / 1MB, 2)
-        echo "Package size: $fileSize MB"
-        
-        # Create a separate source code zip
-        $sourceZipName = "${{ env.PROJECT_NAME }}-Source-$env:VERSION_TAG.zip"
-        Compress-Archive -Path "${{ env.PROJECT_FOLDER }}\*" -DestinationPath $sourceZipName -CompressionLevel Optimal
-        echo "SOURCE_PACKAGE_NAME=$sourceZipName" >> $env:GITHUB_ENV
+        Write-Host "✅ Created package: $zipName"
       shell: powershell
 
-    - name: Upload build artifacts
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ env.PROJECT_NAME }}-${{ env.VERSION_TAG }}
-        path: deployment/
+        name: ${{ env.PROJECT_NAME }}-${{ env.VERSION }}
+        path: deploy/
         retention-days: 30
 
-    - name: Upload source artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ env.PROJECT_NAME }}-Source-${{ env.VERSION_TAG }}
-        path: ${{ env.PROJECT_FOLDER }}/
-        retention-days: 30
-
-    - name: Create GitHub Release (on tag)
+    - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          ${{ env.PACKAGE_NAME }}
-          ${{ env.SOURCE_PACKAGE_NAME }}
-        name: Web Calculator Release ${{ env.VERSION_TAG }}
+        files: ${{ env.PACKAGE_NAME }}
+        name: Web Calculator ${{ env.VERSION }}
         body: |
-          ## Web Calculator ${{ env.VERSION_TAG }}
+          ## Web Calculator Release ${{ env.VERSION }}
           
-          A professional web-based calculator application built with ASP.NET Web Forms and .NET Framework 4.8.
+          ASP.NET Web Forms calculator application ready for IIS deployment.
           
-          ### 🌟 Features
-          - Clean, responsive web interface
-          - Basic arithmetic operations (+, -, ×, ÷)
-          - Percentage calculations and sign toggle
-          - Professional gradient design
-          - Mobile-friendly responsive layout
-          - Error handling and validation
-          - IIS-ready deployment package
+          ### Features
+          - Responsive web interface
+          - Basic arithmetic operations
+          - Professional design
+          - IIS deployment ready
           
-          ### 📦 Downloads
-          - **${{ env.PACKAGE_NAME }}** - Complete IIS deployment package
-          - **${{ env.SOURCE_PACKAGE_NAME }}** - Source code for developers
+          ### Quick Deploy
+          1. Download the ZIP file below
+          2. Extract to IIS web directory
+          3. Create IIS Application
+          4. Browse to Default.aspx
           
-          ### 🚀 IIS Deployment Instructions
-          1. Download the deployment package above
-          2. Extract to your IIS web directory (e.g., C:\inetpub\wwwroot\calculator)
-          3. Create IIS Application/Virtual Directory pointing to extracted folder  
-          4. Set Application Pool to .NET Framework v4.0 (Integrated Pipeline)
-          5. Grant IIS_IUSRS read permissions to the folder
-          6. Browse to http://yourserver/calculator/
-          
-          ### 💻 System Requirements
-          - Windows Server with IIS 7.0+
-          - .NET Framework 4.8 or later
-          - ASP.NET Web Forms feature enabled
-          
-          ### 🔧 Built From
-          - Commit: ${{ github.sha }}
-          - Target Framework: .NET Framework 4.8
-          - Build Configuration: Release
-        draft: false
-        prerelease: false
+          ### Requirements
+          - Windows Server with IIS
+          - .NET Framework 4.8
+          - ASP.NET Web Forms enabled
 
-    - name: Publish to GitHub Packages
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    - name: Build summary
       run: |
-        # Create package.json for npm-style publishing
-        $packageJson = @{
-          name = "@$($env:GITHUB_REPOSITORY.ToLower().Replace('/', '-'))/web-calculator"
-          version = ($env:VERSION_TAG -replace '^v', '') -replace '[^0-9\.].*$', ''
-          description = "Web Calculator - ASP.NET Web Forms Application for IIS"
-          main = "Default.aspx"
-          repository = @{
-            type = "git"
-            url = "git+https://github.com/$env:GITHUB_REPOSITORY.git"
-          }
-          author = $env:GITHUB_ACTOR
-          license = "MIT"
-          keywords = @("calculator", "asp.net", "webforms", "iis", "web-application")
-          files = @("*")
-        } | ConvertTo-Json -Depth 3
-        
-        $packageJson | Out-File -FilePath "deployment\package.json" -Encoding UTF8
-        
-        # Configure npm registry
-        echo "@$($env:GITHUB_REPOSITORY_OWNER.ToLower()):registry=https://npm.pkg.github.com" > deployment\.npmrc
-        echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> deployment\.npmrc
-        
-        # Publish package
-        cd deployment
-        try {
-          npm publish --access public
-          echo "✅ Package published successfully to GitHub Packages"
-        } catch {
-          echo "⚠️ Package publish failed: $($_.Exception.Message)"
-          echo "This might be due to version conflicts or permissions"
-        }
-      shell: powershell
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Build Summary
-      run: |
-        echo "## 🎉 Web Calculator Build Completed Successfully!" >> $env:GITHUB_STEP_SUMMARY
-        echo "" >> $env:GITHUB_STEP_SUMMARY
-        echo "### 🌐 Application Details" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Project**: ASP.NET Web Forms Calculator" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Framework**: .NET Framework ${{ env.DOTNET_FRAMEWORK_VERSION }}" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Version**: $env:VERSION_TAG" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Build Configuration**: ${{ env.BUILD_CONFIGURATION }}" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Deployment Package**: $env:PACKAGE_NAME" >> $env:GITHUB_STEP_SUMMARY
-        echo "" >> $env:GITHUB_STEP_SUMMARY
-        echo "### 📦 Available Downloads" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **GitHub Actions Artifacts**: Available for 30 days" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **IIS Deployment Package**: Ready-to-deploy ZIP file" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Source Code Package**: Complete source code" >> $env:GITHUB_STEP_SUMMARY
-        if ($env:GITHUB_REF -match 'refs/tags/') {
-          echo "- **GitHub Releases**: Permanent release packages" >> $env:GITHUB_STEP_SUMMARY
-        }
-        if ($env:GITHUB_REF -match 'refs/heads/(main|develop)' -or $env:GITHUB_REF -match 'refs/tags/') {
-          echo "- **GitHub Packages**: NPM-style package registry" >> $env:GITHUB_STEP_SUMMARY
-        }
-        echo "" >> $env:GITHUB_STEP_SUMMARY
-        echo "### 🚀 IIS Deployment Ready!" >> $env:GITHUB_STEP_SUMMARY
-        echo "The deployment package includes everything needed for IIS:" >> $env:GITHUB_STEP_SUMMARY
-        echo "- Compiled binaries and dependencies" >> $env:GITHUB_STEP_SUMMARY
-        echo "- Optimized production web.config" >> $env:GITHUB_STEP_SUMMARY
-        echo "- Complete deployment instructions" >> $env:GITHUB_STEP_SUMMARY
-        echo "- All static content (CSS, images, etc.)" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "## ✅ Build Summary" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Version**: $env:VERSION" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Package**: $env:PACKAGE_NAME" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Status**: Build completed successfully" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Artifacts**: Available for download" >> $env:GITHUB_STEP_SUMMARY
       shell: powershell
