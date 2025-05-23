@@ -51,7 +51,7 @@ jobs:
       run: |
         cd "${{ env.PROJECT_FOLDER }}"
         if (Test-Path "packages.config") {
-          nuget restore packages.config
+          nuget restore packages.config -SolutionDirectory .
           Write-Host "✅ NuGet restore completed"
         }
       shell: powershell
@@ -127,7 +127,7 @@ jobs:
         - .NET Framework 4.8
         - ASP.NET enabled
         "@
-        $info | Out-File "deploy\README.txt" -Encoding UTF8
+                $info | Out-File "deploy\README.txt" -Encoding UTF8
       shell: powershell
 
     - name: Create ZIP package
