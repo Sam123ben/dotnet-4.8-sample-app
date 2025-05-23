@@ -285,32 +285,32 @@ jobs:
         draft: false
         prerelease: false
 
-    - name: Build Summary
-      run: |
-        echo "## 🎉 Web Calculator Build Completed Successfully!" >> $env:GITHUB_STEP_SUMMARY
-        echo "" >> $env:GITHUB_STEP_SUMMARY
-        echo "### 🌐 Application Details" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Project**: ASP.NET Web Forms Calculator" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Framework**: .NET Framework ${{ env.DOTNET_FRAMEWORK_VERSION }}" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Version**: $env:VERSION_TAG" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Build Configuration**: ${{ env.BUILD_CONFIGURATION }}" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Deployment Package**: $env:PACKAGE_NAME" >> $env:GITHUB_STEP_SUMMARY
-        echo "" >> $env:GITHUB_STEP_SUMMARY
-        echo "### 📦 Available Downloads" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **GitHub Actions Artifacts**: Available for 30 days" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **IIS Deployment Package**: Ready-to-deploy ZIP file" >> $env:GITHUB_STEP_SUMMARY
-        echo "- **Source Code Package**: Complete source code" >> $env:GITHUB_STEP_SUMMARY
-        if ($env:GITHUB_REF -match 'refs/tags/') {
-          echo "- **GitHub Releases**: Permanent release packages" >> $env:GITHUB_STEP_SUMMARY
-        }
-        if ($env:GITHUB_REF -match 'refs/heads/(main|develop)' -or $env:GITHUB_REF -match 'refs/tags/') {
-          echo "- **GitHub Packages**: NPM-style package registry" >> $env:GITHUB_STEP_SUMMARY
-        }
-        echo "" >> $env:GITHUB_STEP_SUMMARY
-        echo "### 🚀 IIS Deployment Ready!" >> $env:GITHUB_STEP_SUMMARY
-        echo "The deployment package includes everything needed for IIS:" >> $env:GITHUB_STEP_SUMMARY
-        echo "- Compiled binaries and dependencies" >> $env:GITHUB_STEP_SUMMARY
-        echo "- Optimized production web.config" >> $env:GITHUB_STEP_SUMMARY
-        echo "- Complete deployment instructions" >> $env:GITHUB_STEP_SUMMARY
-        echo "- All static content (CSS, images, etc.)" >> $env:GITHUB_STEP_SUMMARY
-      shell: powershell
+    # - name: Build Summary
+    #   run: |
+    #     echo "## 🎉 Web Calculator Build Completed Successfully!" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "### 🌐 Application Details" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- **Project**: ASP.NET Web Forms Calculator" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- **Framework**: .NET Framework ${{ env.DOTNET_FRAMEWORK_VERSION }}" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- **Version**: $env:VERSION_TAG" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- **Build Configuration**: ${{ env.BUILD_CONFIGURATION }}" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- **Deployment Package**: $env:PACKAGE_NAME" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "### 📦 Available Downloads" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- **GitHub Actions Artifacts**: Available for 30 days" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- **IIS Deployment Package**: Ready-to-deploy ZIP file" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- **Source Code Package**: Complete source code" >> $env:GITHUB_STEP_SUMMARY
+    #     if ($env:GITHUB_REF -match 'refs/tags/') {
+    #       echo "- **GitHub Releases**: Permanent release packages" >> $env:GITHUB_STEP_SUMMARY
+    #     }
+    #     if ($env:GITHUB_REF -match 'refs/heads/(main|develop)' -or $env:GITHUB_REF -match 'refs/tags/') {
+    #       echo "- **GitHub Packages**: NPM-style package registry" >> $env:GITHUB_STEP_SUMMARY
+    #     }
+    #     echo "" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "### 🚀 IIS Deployment Ready!" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "The deployment package includes everything needed for IIS:" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- Compiled binaries and dependencies" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- Optimized production web.config" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- Complete deployment instructions" >> $env:GITHUB_STEP_SUMMARY
+    #     echo "- All static content (CSS, images, etc.)" >> $env:GITHUB_STEP_SUMMARY
+    #   shell: powershell
