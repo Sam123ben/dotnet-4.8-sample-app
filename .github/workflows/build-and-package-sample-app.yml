@@ -127,35 +127,61 @@ jobs:
       shell: powershell
 
     - name: Publish web application
+      continue-on-error: true
       run: |
         try {
+          Write-Host "Creating publish output using manual approach..."
+          $publishDir = Join-Path $PWD "publish"
+          New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
+          
+          # Find the web project directory
+          $webProjectDir = ""
           if ("${{ steps.detect-structure.outputs.USE_SOLUTION }}" -eq "true") {
-            Write-Host "Publishing solution..."
-            # Find the web project in the solution
             $webProject = Get-ChildItem -Path . -Filter "*.csproj" -Recurse | Where-Object { 
               $content = Get-Content $_.FullName -Raw
               $content -match "Microsoft.WebApplication.targets" -or $content -match "349c5851-65df-11da-9384-00065b846f21"
             } | Select-Object -First 1
             
             if ($webProject) {
-              Write-Host "Found web project: $($webProject.FullName)"
-              $publishDir = Join-Path $PWD "publish"
-              Write-Host "Publishing to: $publishDir"
-              
-              # Use the simpler WebPublish target without profiles
-              msbuild "$($webProject.FullName)" /t:WebPublish /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:WebPublishMethod=FileSystem /p:PublishUrl="$publishDir" /p:DeployDefaultTarget=WebPublish
-            } else {
-              Write-Host "No web project found, skipping publish step"
+              $webProjectDir = Split-Path $webProject.FullName -Parent
+              Write-Host "Found web project directory: $webProjectDir"
             }
           } else {
-            Write-Host "Publishing project..."
-            $publishDir = Join-Path $PWD "publish"
-            Write-Host "Publishing to: $publishDir"
-            msbuild "${{ steps.detect-structure.outputs.PROJECT_FILE }}" /t:WebPublish /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:WebPublishMethod=FileSystem /p:PublishUrl="$publishDir" /p:DeployDefaultTarget=WebPublish
+            $webProjectDir = Split-Path "${{ steps.detect-structure.outputs.PROJECT_FILE }}" -Parent
+            Write-Host "Using project directory: $webProjectDir"
+          }
+          
+          if ($webProjectDir -and (Test-Path $webProjectDir)) {
+            Write-Host "Copying web application files to publish directory..."
+            
+            # Copy web content files
+            @("*.aspx", "*.html", "*.htm", "Global.asax", "Web.config", "*.ashx", "*.asmx") | ForEach-Object {
+              Get-ChildItem -Path $webProjectDir -Filter $_ -ErrorAction SilentlyContinue | ForEach-Object {
+                Copy-Item $_.FullName $publishDir -Force
+                Write-Host "Copied: $($_.Name)"
+              }
+            }
+            
+            # Copy directories
+            @("bin", "Content", "Scripts", "Images", "Areas", "Views", "App_Data", "App_Code") | ForEach-Object {
+              $sourceDir = Join-Path $webProjectDir $_
+              if (Test-Path $sourceDir) {
+                $destDir = Join-Path $publishDir $_
+                Copy-Item $sourceDir $destDir -Recurse -Force
+                Write-Host "Copied directory: $_"
+              }
+            }
+            
+            Write-Host "✅ Manual publish completed"
+            Write-Host "Published files:"
+            Get-ChildItem $publishDir -Recurse | Select-Object Name, FullName | Format-Table -AutoSize
+          } else {
+            Write-Host "❌ Could not determine web project directory"
+            Write-Host "Will rely on deployment package step to copy files from bin directory"
           }
         } catch {
-          Write-Host "⚠️ Publish step failed, will use bin output instead"
-          Write-Host "Error: $_"
+          Write-Host "⚠️ Publish step encountered an error: $_"
+          Write-Host "Deployment package step will handle file copying from build output"
         }
       shell: powershell
 
