@@ -56,10 +56,29 @@ jobs:
         }
       shell: powershell
 
+    - name: Validate project configuration
+      run: |
+        cd "${{ env.PROJECT_FOLDER }}"
+        if (Test-Path "${{ env.PROJECT_NAME }}.csproj") {
+          Write-Host "✅ Project file found"
+          # Check if Release|AnyCPU configuration exists
+          $csprojContent = Get-Content "${{ env.PROJECT_NAME }}.csproj"
+          if ($csprojContent -match 'Release\|AnyCPU') {
+            Write-Host "✅ Release|AnyCPU configuration found in csproj"
+          } else {
+            Write-Host "❌ Release|AnyCPU configuration not found in csproj"
+            exit 1
+          }
+        } else {
+          Write-Host "❌ Project file not found"
+          exit 1
+        }
+      shell: powershell
+
     - name: Build application
       run: |
         cd "${{ env.PROJECT_FOLDER }}"
-        msbuild "${{ env.PROJECT_NAME }}.csproj" /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU"
+        msbuild "${{ env.PROJECT_NAME }}.csproj" /t:Build /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="AnyCPU"
       shell: powershell
 
     - name: Verify build
@@ -188,7 +207,8 @@ jobs:
         Write-Host "## 🎉 Web Calculator Build Completed Successfully!" >> $env:GITHUB_STEP_SUMMARY
         Write-Host "" >> $env:GITHUB_STEP_SUMMARY
         Write-Host "### 🌐 Application Details" >> $env:GITHUB_STEP_SUMMARY
-        Write-Host "- **Project**: ASP.NET Web Forms Calculator" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Project**: ASP.NET W
+        System: eb Forms Calculator" >> $env:GITHUB_STEP_SUMMARY
         Write-Host "- **Framework**: .NET Framework 4.8" >> $env:GITHUB_STEP_SUMMARY
         Write-Host "- **Version**: $env:VERSION" >> $env:GITHUB_STEP_SUMMARY
         Write-Host "- **Build Configuration**: ${{ env.BUILD_CONFIGURATION }}" >> $env:GITHUB_STEP_SUMMARY
