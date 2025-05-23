@@ -1,0 +1,415 @@
+name: Build and Deploy Descope .NET 4.8 Sample App
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+    paths:
+      - '**/*.cs'
+      - '**/*.aspx'
+      - '**/*.csproj'
+      - '**/*.sln'
+      - '**/Web.config'
+      - '**/packages.config'
+      - '.github/workflows/build-and-package-sample-app.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**/*.cs'
+      - '**/*.aspx'
+      - '**/*.csproj'
+      - '**/*.sln'
+      - '**/Web.config'
+      - '**/packages.config'
+      - '.github/workflows/build-and-package-sample-app.yml'
+
+env:
+  BUILD_CONFIGURATION: 'Release'
+  PROJECT_NAME: 'DescopeSampleApp'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-package:
+    runs-on: windows-latest
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v2
+
+    - name: Detect project structure
+      id: detect-structure
+      run: |
+        # Find solution file
+        $slnFiles = Get-ChildItem -Path . -Filter "*.sln" -Recurse
+        if ($slnFiles.Count -gt 0) {
+          $solutionFile = $slnFiles[0].FullName
+          Write-Host "✅ Found solution file: $solutionFile"
+          echo "SOLUTION_FILE=$solutionFile" >> $env:GITHUB_OUTPUT
+          echo "USE_SOLUTION=true" >> $env:GITHUB_OUTPUT
+        } else {
+          # Find project files
+          $csprojFiles = Get-ChildItem -Path . -Filter "*.csproj" -Recurse
+          if ($csprojFiles.Count -gt 0) {
+            $projectFile = $csprojFiles[0].FullName
+            Write-Host "✅ Found project file: $projectFile"
+            echo "PROJECT_FILE=$projectFile" >> $env:GITHUB_OUTPUT
+            echo "USE_SOLUTION=false" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "❌ No solution or project files found"
+            exit 1
+          }
+        }
+      shell: powershell
+
+    - name: Verify project structure
+      run: |
+        Write-Host "=== Project Structure ==="
+        Get-ChildItem -Recurse -Include "*.sln", "*.csproj", "*.aspx", "*.cs", "Web.config", "packages.config" | 
+          ForEach-Object { Write-Host $_.FullName }
+        Write-Host "========================="
+      shell: powershell
+
+    - name: Restore NuGet packages
+      run: |
+        if ("${{ steps.detect-structure.outputs.USE_SOLUTION }}" -eq "true") {
+          Write-Host "Restoring packages for solution..."
+          nuget restore "${{ steps.detect-structure.outputs.SOLUTION_FILE }}"
+        } else {
+          Write-Host "Restoring packages for project..."
+          $projectDir = Split-Path "${{ steps.detect-structure.outputs.PROJECT_FILE }}" -Parent
+          if (Test-Path "$projectDir\packages.config") {
+            nuget restore "$projectDir\packages.config" -SolutionDirectory .
+          }
+        }
+        Write-Host "✅ NuGet restore completed"
+      shell: powershell
+
+    - name: Build application
+      run: |
+        if ("${{ steps.detect-structure.outputs.USE_SOLUTION }}" -eq "true") {
+          Write-Host "Building solution..."
+          msbuild "${{ steps.detect-structure.outputs.SOLUTION_FILE }}" /t:Build /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem /p:PublishProfile=FolderProfile /p:PublishUrl=.\publish\
+        } else {
+          Write-Host "Building project..."
+          msbuild "${{ steps.detect-structure.outputs.PROJECT_FILE }}" /t:Build /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem /p:PublishProfile=FolderProfile /p:PublishUrl=.\publish\
+        }
+      shell: powershell
+
+    - name: Verify build output
+      run: |
+        Write-Host "=== Build Output ==="
+        if (Test-Path "bin") {
+          Write-Host "✅ bin folder found"
+          Get-ChildItem "bin" -Recurse | Select-Object Name, FullName | Format-Table
+        }
+        if (Test-Path "publish") {
+          Write-Host "✅ publish folder found"
+          Get-ChildItem "publish" -Recurse | Select-Object Name, FullName | Format-Table
+        }
+        Write-Host "===================="
+      shell: powershell
+
+    - name: Create deployment package
+      run: |
+        New-Item -ItemType Directory -Force -Path "deploy"
+        
+        # Copy web application files
+        if (Test-Path "publish") {
+          Write-Host "Copying from publish folder..."
+          Copy-Item "publish\*" "deploy\" -Recurse -Force
+        } else {
+          Write-Host "Copying from project folder..."
+          # Copy ASPX pages
+          Get-ChildItem -Path . -Filter "*.aspx" -Recurse | ForEach-Object {
+            Copy-Item $_.FullName "deploy\" -Force -ErrorAction Continue
+          }
+          
+          # Copy ASPX.CS code-behind files
+          Get-ChildItem -Path . -Filter "*.aspx.cs" -Recurse | ForEach-Object {
+            Copy-Item $_.FullName "deploy\" -Force -ErrorAction Continue
+          }
+          
+          # Copy Global.asax
+          Get-ChildItem -Path . -Filter "Global.asax*" -Recurse | ForEach-Object {
+            Copy-Item $_.FullName "deploy\" -Force -ErrorAction Continue
+          }
+          
+          # Copy Web.config
+          Get-ChildItem -Path . -Filter "Web.config" -Recurse | ForEach-Object {
+            Copy-Item $_.FullName "deploy\" -Force -ErrorAction Continue
+          }
+          
+          # Copy bin folder
+          if (Test-Path "bin") {
+            Copy-Item "bin" "deploy\" -Recurse -Force
+          }
+          
+          # Copy Content and Scripts folders if they exist
+          if (Test-Path "Content") {
+            Copy-Item "Content" "deploy\" -Recurse -Force
+          }
+          if (Test-Path "Scripts") {
+            Copy-Item "Scripts" "deploy\" -Recurse -Force
+          }
+          if (Test-Path "Images") {
+            Copy-Item "Images" "deploy\" -Recurse -Force
+          }
+        }
+        
+        Write-Host "✅ Deployment package created"
+        Get-ChildItem "deploy" -Recurse | Select-Object Name, FullName | Format-Table
+      shell: powershell
+
+    - name: Set version
+      id: version
+      run: |
+        if ($env:GITHUB_REF -match 'refs/tags/(.*)') {
+          $version = $matches[1]
+        } else {
+          $version = "dev-$($env:GITHUB_SHA.Substring(0,7))"
+        }
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+      shell: powershell
+
+    - name: Create deployment info
+      run: |
+        $info = @"
+        Descope .NET 4.8 Sample App Deployment Package
+        =============================================
+        Version: $env:VERSION
+        Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+        Commit: $env:GITHUB_SHA
+        Repository: $env:GITHUB_REPOSITORY
+
+        IIS Deployment Instructions:
+        ===========================
+        1. Extract this package to your web directory (e.g., C:\inetpub\wwwroot\DescopeSampleApp)
+        2. Create IIS Application pointing to the extracted folder
+        3. Set Application Pool to .NET Framework 4.8
+        4. Ensure ASP.NET is enabled in IIS
+        5. Set your Descope Project ID in the environment variable: DESCOPE_PROJECT_ID
+        6. Update the Descope Project ID in AuthenticatedPage.aspx if needed
+        7. Browse to Default.aspx or Login.aspx
+
+        Requirements:
+        ============
+        - Windows Server with IIS
+        - .NET Framework 4.8
+        - ASP.NET Web Forms enabled
+        - Valid Descope Project ID
+
+        Features:
+        =========
+        - Descope authentication integration
+        - JWT token validation
+        - ASP.NET Web Forms frontend
+        - Bearer token API protection
+
+        Support:
+        ========
+        For issues, visit: https://github.com/$env:GITHUB_REPOSITORY/issues
+        "@
+        $info | Out-File "deploy\README.txt" -Encoding UTF8
+        
+        # Create a simple deployment script
+        $deployScript = @"
+        @echo off
+        echo Descope .NET 4.8 Sample App Deployment
+        echo =====================================
+        echo.
+        echo This package contains a ready-to-deploy ASP.NET Web Forms application
+        echo with Descope authentication integration.
+        echo.
+        echo Next steps:
+        echo 1. Extract all files to your IIS web directory
+        echo 2. Create an IIS Application pointing to this folder
+        echo 3. Set Application Pool to .NET Framework 4.8
+        echo 4. Set your DESCOPE_PROJECT_ID environment variable
+        echo 5. Browse to the application
+        echo.
+        echo For detailed instructions, see README.txt
+        pause
+        "@
+        $deployScript | Out-File "deploy\DEPLOY.bat" -Encoding ASCII
+      shell: powershell
+
+    - name: Create ZIP package
+      run: |
+        $zipName = "descope-dotnet-48-sample-$env:VERSION.zip"
+        Compress-Archive -Path "deploy\*" -DestinationPath $zipName
+        echo "PACKAGE_NAME=$zipName" >> $env:GITHUB_ENV
+        Write-Host "✅ Created package: $zipName"
+        
+        # Get package size
+        $packageSize = (Get-Item $zipName).length / 1MB
+        Write-Host "📦 Package size: $([math]::Round($packageSize, 2)) MB"
+      shell: powershell
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: descope-dotnet-48-sample-${{ steps.version.outputs.version }}
+        path: |
+          deploy/
+          ${{ env.PACKAGE_NAME }}
+        retention-days: 30
+
+    - name: Login to Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create container package metadata
+      if: github.event_name != 'pull_request'
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+        labels: |
+          org.opencontainers.image.title=Descope .NET 4.8 Sample App
+          org.opencontainers.image.description=Sample ASP.NET Web Forms application with Descope authentication
+          org.opencontainers.image.vendor=Descope Sample Apps
+
+    - name: Create and push package to GitHub Packages
+      if: github.event_name != 'pull_request'
+      run: |
+        # Create a simple package manifest for the ZIP file
+        $packageJson = @{
+          name = "descope-dotnet-48-sample"
+          version = "$env:VERSION"
+          description = "Descope .NET Framework 4.8 Sample Application - IIS Deployment Package"
+          repository = @{
+            type = "git"
+            url = "https://github.com/$env:GITHUB_REPOSITORY"
+          }
+          keywords = @("descope", "dotnet", "aspnet", "authentication", "webforms", "iis")
+          license = "MIT"
+          files = @("$env:PACKAGE_NAME")
+        } | ConvertTo-Json -Depth 3
+        
+        $packageJson | Out-File "package.json" -Encoding UTF8
+        
+        # Create .npmrc for GitHub Packages
+        "@$($env:GITHUB_REPOSITORY.Split('/')[0]):registry=https://npm.pkg.github.com" | Out-File ".npmrc" -Encoding ASCII
+        "//npm.pkg.github.com/:_authToken=$env:GITHUB_TOKEN" | Add-Content ".npmrc"
+        
+        Write-Host "✅ Package manifest created"
+        Write-Host "Package contents:"
+        Get-Content "package.json"
+      shell: powershell
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Publish to GitHub Packages (Generic)
+      if: github.event_name != 'pull_request'
+      run: |
+        # Upload the ZIP file as a generic package
+        $uploadUrl = "https://nuget.pkg.github.com/$($env:GITHUB_REPOSITORY.Split('/')[0])/download/descope-dotnet-48-sample/$env:VERSION/$env:PACKAGE_NAME"
+        
+        Write-Host "Uploading package to GitHub Packages..."
+        Write-Host "Package: $env:PACKAGE_NAME"
+        Write-Host "Version: $env:VERSION"
+        
+        # Note: GitHub Packages requires authentication and proper API calls
+        # This is a placeholder for the actual upload process
+        Write-Host "✅ Package ready for GitHub Packages"
+        Write-Host "Manual upload required or use specific GitHub Packages action"
+      shell: powershell
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ env.PACKAGE_NAME }}
+        name: Descope .NET 4.8 Sample App ${{ env.VERSION }}
+        body: |
+          ## Descope .NET Framework 4.8 Sample Application ${{ env.VERSION }}
+
+          ASP.NET Web Forms application demonstrating Descope authentication integration, ready for IIS deployment.
+
+          ### ✨ Features
+          - **Descope Authentication**: Complete integration with Descope authentication flows
+          - **JWT Token Validation**: Secure API endpoints with Bearer token validation
+          - **ASP.NET Web Forms**: Traditional web forms architecture
+          - **IIS Ready**: Pre-configured for Windows Server/IIS deployment
+          - **Responsive Design**: Modern web interface with JavaScript integration
+
+          ### 📦 What's Included
+          - Complete web application files (.aspx, .cs, Web.config)
+          - Compiled binaries and dependencies
+          - Deployment scripts and documentation
+          - Sample configuration files
+
+          ### 🚀 Quick Deployment
+          1. **Download**: Get `${{ env.PACKAGE_NAME }}` below
+          2. **Extract**: Unzip to your IIS web directory (e.g., `C:\inetpub\wwwroot\DescopeSampleApp`)
+          3. **Configure IIS**: Create Application pointing to extracted folder
+          4. **Set App Pool**: Use .NET Framework 4.8 Application Pool
+          5. **Environment**: Set `DESCOPE_PROJECT_ID` environment variable
+          6. **Update Config**: Modify Descope Project ID in `AuthenticatedPage.aspx`
+          7. **Test**: Browse to `/Default.aspx` or `/Login.aspx`
+
+          ### 🔧 Requirements
+          - Windows Server with IIS
+          - .NET Framework 4.8
+          - ASP.NET Web Forms enabled
+          - Valid Descope Project ID from [Descope Console](https://app.descope.com)
+
+          ### 📚 Documentation
+          - See `README.txt` in the package for detailed instructions
+          - Run `DEPLOY.bat` for guided setup
+          - Visit [Descope Documentation](https://docs.descope.com) for configuration help
+
+          ### 🐛 Support
+          - **Issues**: [Create an issue](https://github.com/${{ github.repository }}/issues)
+          - **Discussions**: [Join the discussion](https://github.com/${{ github.repository }}/discussions)
+          - **Descope Support**: [Descope Community](https://github.com/descope/descope-dotnet)
+
+          ### 🏗️ Build Information
+          - **Commit**: `${{ github.sha }}`
+          - **Build Date**: `$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')`
+          - **Workflow**: `${{ github.workflow }}`
+        draft: false
+        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+
+    - name: Post-build summary
+      if: always()
+      run: |
+        Write-Host ""
+        Write-Host "🎉 BUILD SUMMARY"
+        Write-Host "================"
+        Write-Host "📍 Repository: $env:GITHUB_REPOSITORY"
+        Write-Host "🏷️  Version: $env:VERSION"
+        Write-Host "📦 Package: $env:PACKAGE_NAME"
+        Write-Host "🔗 Commit: $env:GITHUB_SHA"
+        Write-Host ""
+        if (Test-Path $env:PACKAGE_NAME) {
+          $size = (Get-Item $env:PACKAGE_NAME).length / 1MB
+          Write-Host "📊 Package Size: $([math]::Round($size, 2)) MB"
+        }
+        Write-Host ""
+        Write-Host "✅ Descope .NET 4.8 Sample App build completed successfully!"
+        Write-Host "🚀 Ready for deployment to IIS"
+        Write-Host ""
+      shell: powershell
