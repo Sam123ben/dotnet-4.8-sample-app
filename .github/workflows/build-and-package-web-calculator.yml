@@ -5,12 +5,12 @@ on:
     branches: [ main, develop ]
     tags: [ 'v*' ]
     paths:
-      - 'SimpleCalculatorWebApp/**'
+      - 'WebCalculator/**'
       - '.github/workflows/build-web-calculator.yml'
   pull_request:
     branches: [ main ]
     paths:
-      - 'SimpleCalculatorWebApp/**'
+      - 'WebCalculator/**'
       - '.github/workflows/build-web-calculator.yml'
 
 env:
