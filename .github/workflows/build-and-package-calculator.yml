@@ -1,4 +1,4 @@
-name: Build and Deploy Web Calculator
+name: Build and Deploy App Calculator
 
 on:
   push:
