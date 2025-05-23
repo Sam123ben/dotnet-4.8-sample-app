@@ -11,7 +11,7 @@ on:
       - 'DescopeSampleApp/*.sln'
       - 'DescopeSampleApp/Web.config'
       - 'DescopeSampleApp/packages.config'
-      - '.github/workflows/DescopeSampleApp'
+      - '.github/workflows/build-and-package-sample-app.yml'
   pull_request:
     branches: [ main ]
     paths:
@@ -21,7 +21,7 @@ on:
       - 'DescopeSampleApp/*.sln'
       - 'DescopeSampleApp/Web.config'
       - 'DescopeSampleApp/packages.config'
-      - '.github/workflows/DescopeSampleApp'
+      - '.github/workflows/build-and-package-sample-app.yml'
 
 env:
   BUILD_CONFIGURATION: 'Release'
