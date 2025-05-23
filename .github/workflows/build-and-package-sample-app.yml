@@ -5,29 +5,30 @@ on:
     branches: [ main, develop ]
     tags: [ 'v*' ]
     paths:
-      - '**/*.cs'
-      - '**/*.aspx'
-      - '**/*.csproj'
-      - '**/*.sln'
-      - '**/Web.config'
-      - '**/packages.config'
-      - '.github/workflows/build-and-package-sample-app.yml'
+      - 'DescopeSampleApp/*.cs'
+      - 'DescopeSampleApp/*.aspx'
+      - 'DescopeSampleApp/*.csproj'
+      - 'DescopeSampleApp/*.sln'
+      - 'DescopeSampleApp/Web.config'
+      - 'DescopeSampleApp/packages.config'
+      - '.github/workflows/DescopeSampleApp'
   pull_request:
     branches: [ main ]
     paths:
-      - '**/*.cs'
-      - '**/*.aspx'
-      - '**/*.csproj'
-      - '**/*.sln'
-      - '**/Web.config'
-      - '**/packages.config'
-      - '.github/workflows/build-and-package-sample-app.yml'
+      - 'DescopeSampleApp/*.cs'
+      - 'DescopeSampleApp/*.aspx'
+      - 'DescopeSampleApp/*.csproj'
+      - 'DescopeSampleApp/*.sln'
+      - 'DescopeSampleApp/Web.config'
+      - 'DescopeSampleApp/packages.config'
+      - '.github/workflows/DescopeSampleApp'
 
 env:
   BUILD_CONFIGURATION: 'Release'
   PROJECT_NAME: 'DescopeSampleApp'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  SOLUTION_DIR: 'DescopeSampleApp'
 
 jobs:
   build-and-package:
@@ -92,17 +93,69 @@ jobs:
             nuget restore "$projectDir\packages.config" -SolutionDirectory .
           }
         }
+        
+        # Also try to restore packages from the main directory
+        if (Test-Path "packages.config") {
+          Write-Host "Restoring packages from root packages.config..."
+          nuget restore packages.config -SolutionDirectory .
+        }
+        
+        # Check for packages folder
+        if (Test-Path "packages") {
+          Write-Host "✅ Packages folder found"
+          Get-ChildItem "packages" | Select-Object Name | Format-Table
+        }
+        
         Write-Host "✅ NuGet restore completed"
       shell: powershell
 
     - name: Build application
       run: |
-        if ("${{ steps.detect-structure.outputs.USE_SOLUTION }}" -eq "true") {
-          Write-Host "Building solution..."
-          msbuild "${{ steps.detect-structure.outputs.SOLUTION_FILE }}" /t:Build /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem /p:PublishProfile=FolderProfile /p:PublishUrl=.\publish\
-        } else {
-          Write-Host "Building project..."
-          msbuild "${{ steps.detect-structure.outputs.PROJECT_FILE }}" /t:Build /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem /p:PublishProfile=FolderProfile /p:PublishUrl=.\publish\
+        try {
+          if ("${{ steps.detect-structure.outputs.USE_SOLUTION }}" -eq "true") {
+            Write-Host "Building solution..."
+            msbuild "${{ steps.detect-structure.outputs.SOLUTION_FILE }}" /t:Build /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /verbosity:minimal
+          } else {
+            Write-Host "Building project..."
+            msbuild "${{ steps.detect-structure.outputs.PROJECT_FILE }}" /t:Build /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /verbosity:minimal
+          }
+          Write-Host "✅ Build completed successfully"
+        } catch {
+          Write-Host "❌ Build failed with error: $_"
+          exit 1
+        }
+      shell: powershell
+
+    - name: Publish web application
+      run: |
+        try {
+          if ("${{ steps.detect-structure.outputs.USE_SOLUTION }}" -eq "true") {
+            Write-Host "Publishing solution..."
+            # Find the web project in the solution
+            $webProject = Get-ChildItem -Path . -Filter "*.csproj" -Recurse | Where-Object { 
+              $content = Get-Content $_.FullName -Raw
+              $content -match "Microsoft.WebApplication.targets" -or $content -match "349c5851-65df-11da-9384-00065b846f21"
+            } | Select-Object -First 1
+            
+            if ($webProject) {
+              Write-Host "Found web project: $($webProject.FullName)"
+              $publishDir = Join-Path $PWD "publish"
+              Write-Host "Publishing to: $publishDir"
+              
+              # Use the simpler WebPublish target without profiles
+              msbuild "$($webProject.FullName)" /t:WebPublish /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:WebPublishMethod=FileSystem /p:PublishUrl="$publishDir" /p:DeployDefaultTarget=WebPublish
+            } else {
+              Write-Host "No web project found, skipping publish step"
+            }
+          } else {
+            Write-Host "Publishing project..."
+            $publishDir = Join-Path $PWD "publish"
+            Write-Host "Publishing to: $publishDir"
+            msbuild "${{ steps.detect-structure.outputs.PROJECT_FILE }}" /t:WebPublish /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /p:WebPublishMethod=FileSystem /p:PublishUrl="$publishDir" /p:DeployDefaultTarget=WebPublish
+          }
+        } catch {
+          Write-Host "⚠️ Publish step failed, will use bin output instead"
+          Write-Host "Error: $_"
         }
       shell: powershell
 
@@ -129,46 +182,67 @@ jobs:
           Write-Host "Copying from publish folder..."
           Copy-Item "publish\*" "deploy\" -Recurse -Force
         } else {
-          Write-Host "Copying from project folder..."
-          # Copy ASPX pages
-          Get-ChildItem -Path . -Filter "*.aspx" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName "deploy\" -Force -ErrorAction Continue
+          Write-Host "Copying from project source..."
+          
+          # Find the project directory
+          $projectDir = "."
+          if ("${{ steps.detect-structure.outputs.USE_SOLUTION }}" -eq "true") {
+            $webProject = Get-ChildItem -Path . -Filter "*.csproj" -Recurse | Where-Object { 
+              $content = Get-Content $_.FullName -Raw
+              $content -match "Microsoft.WebApplication.targets" -or $content -match "349c5851-65df-11da-9384-00065b846f21"
+            } | Select-Object -First 1
+            
+            if ($webProject) {
+              $projectDir = Split-Path $webProject.FullName -Parent
+              Write-Host "Using web project directory: $projectDir"
+            }
+          } else {
+            $projectDir = Split-Path "${{ steps.detect-structure.outputs.PROJECT_FILE }}" -Parent
           }
           
-          # Copy ASPX.CS code-behind files
-          Get-ChildItem -Path . -Filter "*.aspx.cs" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName "deploy\" -Force -ErrorAction Continue
+          # Copy ASPX pages and related files
+          Get-ChildItem -Path $projectDir -Filter "*.aspx" | ForEach-Object {
+            Copy-Item $_.FullName "deploy\" -Force
+            Write-Host "Copied: $($_.Name)"
           }
           
           # Copy Global.asax
-          Get-ChildItem -Path . -Filter "Global.asax*" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName "deploy\" -Force -ErrorAction Continue
+          Get-ChildItem -Path $projectDir -Filter "Global.asax" | ForEach-Object {
+            Copy-Item $_.FullName "deploy\" -Force
+            Write-Host "Copied: $($_.Name)"
           }
           
           # Copy Web.config
-          Get-ChildItem -Path . -Filter "Web.config" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName "deploy\" -Force -ErrorAction Continue
+          if (Test-Path "$projectDir\Web.config") {
+            Copy-Item "$projectDir\Web.config" "deploy\" -Force
+            Write-Host "Copied: Web.config"
           }
           
-          # Copy bin folder
-          if (Test-Path "bin") {
-            Copy-Item "bin" "deploy\" -Recurse -Force
+          # Copy bin folder from project directory
+          if (Test-Path "$projectDir\bin") {
+            Copy-Item "$projectDir\bin" "deploy\" -Recurse -Force
+            Write-Host "Copied: bin folder"
           }
           
-          # Copy Content and Scripts folders if they exist
-          if (Test-Path "Content") {
-            Copy-Item "Content" "deploy\" -Recurse -Force
+          # Copy Content, Scripts, and other asset folders
+          @("Content", "Scripts", "Images", "Areas") | ForEach-Object {
+            $folderPath = Join-Path $projectDir $_
+            if (Test-Path $folderPath) {
+              Copy-Item $folderPath "deploy\" -Recurse -Force
+              Write-Host "Copied: $_ folder"
+            }
           }
-          if (Test-Path "Scripts") {
-            Copy-Item "Scripts" "deploy\" -Recurse -Force
-          }
-          if (Test-Path "Images") {
-            Copy-Item "Images" "deploy\" -Recurse -Force
+          
+          # Copy Views folder if it exists (for MVC support)
+          if (Test-Path "$projectDir\Views") {
+            Copy-Item "$projectDir\Views" "deploy\" -Recurse -Force
+            Write-Host "Copied: Views folder"
           }
         }
         
         Write-Host "✅ Deployment package created"
-        Get-ChildItem "deploy" -Recurse | Select-Object Name, FullName | Format-Table
+        Write-Host "Contents:"
+        Get-ChildItem "deploy" -Recurse | Select-Object Name, FullName | Format-Table -AutoSize
       shell: powershell
 
     - name: Set version
@@ -349,11 +423,11 @@ jobs:
           ASP.NET Web Forms application demonstrating Descope authentication integration, ready for IIS deployment.
 
           ### ✨ Features
-          - **Descope Authentication**: Complete integration with Descope authentication flows
-          - **JWT Token Validation**: Secure API endpoints with Bearer token validation
-          - **ASP.NET Web Forms**: Traditional web forms architecture
-          - **IIS Ready**: Pre-configured for Windows Server/IIS deployment
-          - **Responsive Design**: Modern web interface with JavaScript integration
+          - DescopeSampleAppDescope AuthenticationDescopeSampleApp: Complete integration with Descope authentication flows
+          - DescopeSampleAppJWT Token ValidationDescopeSampleApp: Secure API endpoints with Bearer token validation
+          - DescopeSampleAppASP.NET Web FormsDescopeSampleApp: Traditional web forms architecture
+          - DescopeSampleAppIIS ReadyDescopeSampleApp: Pre-configured for Windows Server/IIS deployment
+          - DescopeSampleAppResponsive DesignDescopeSampleApp: Modern web interface with JavaScript integration
 
           ### 📦 What's Included
           - Complete web application files (.aspx, .cs, Web.config)
@@ -362,13 +436,13 @@ jobs:
           - Sample configuration files
 
           ### 🚀 Quick Deployment
-          1. **Download**: Get `${{ env.PACKAGE_NAME }}` below
-          2. **Extract**: Unzip to your IIS web directory (e.g., `C:\inetpub\wwwroot\DescopeSampleApp`)
-          3. **Configure IIS**: Create Application pointing to extracted folder
-          4. **Set App Pool**: Use .NET Framework 4.8 Application Pool
-          5. **Environment**: Set `DESCOPE_PROJECT_ID` environment variable
-          6. **Update Config**: Modify Descope Project ID in `AuthenticatedPage.aspx`
-          7. **Test**: Browse to `/Default.aspx` or `/Login.aspx`
+          1. DescopeSampleAppDownloadDescopeSampleApp: Get `${{ env.PACKAGE_NAME }}` below
+          2. DescopeSampleAppExtractDescopeSampleApp: Unzip to your IIS web directory (e.g., `C:\inetpub\wwwroot\DescopeSampleApp`)
+          3. DescopeSampleAppConfigure IISDescopeSampleApp: Create Application pointing to extracted folder
+          4. DescopeSampleAppSet App PoolDescopeSampleApp: Use .NET Framework 4.8 Application Pool
+          5. DescopeSampleAppEnvironmentDescopeSampleApp: Set `DESCOPE_PROJECT_ID` environment variable
+          6. DescopeSampleAppUpdate ConfigDescopeSampleApp: Modify Descope Project ID in `AuthenticatedPage.aspx`
+          7. DescopeSampleAppTestDescopeSampleApp: Browse to `/Default.aspx` or `/Login.aspx`
 
           ### 🔧 Requirements
           - Windows Server with IIS
@@ -382,14 +456,14 @@ jobs:
           - Visit [Descope Documentation](https://docs.descope.com) for configuration help
 
           ### 🐛 Support
-          - **Issues**: [Create an issue](https://github.com/${{ github.repository }}/issues)
-          - **Discussions**: [Join the discussion](https://github.com/${{ github.repository }}/discussions)
-          - **Descope Support**: [Descope Community](https://github.com/descope/descope-dotnet)
+          - DescopeSampleAppIssuesDescopeSampleApp: [Create an issue](https://github.com/${{ github.repository }}/issues)
+          - DescopeSampleAppDiscussionsDescopeSampleApp: [Join the discussion](https://github.com/${{ github.repository }}/discussions)
+          - DescopeSampleAppDescope SupportDescopeSampleApp: [Descope Community](https://github.com/descope/descope-dotnet)
 
           ### 🏗️ Build Information
-          - **Commit**: `${{ github.sha }}`
-          - **Build Date**: `$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')`
-          - **Workflow**: `${{ github.workflow }}`
+          - DescopeSampleAppCommitDescopeSampleApp: `${{ github.sha }}`
+          - DescopeSampleAppBuild DateDescopeSampleApp: `$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')`
+          - DescopeSampleAppWorkflowDescopeSampleApp: `${{ github.workflow }}`
         draft: false
         prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
 
