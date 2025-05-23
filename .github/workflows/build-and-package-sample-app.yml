@@ -55,7 +55,7 @@ jobs:
         $slnFiles = Get-ChildItem -Path . -Filter "*.sln" -Recurse
         if ($slnFiles.Count -gt 0) {
           $solutionFile = $slnFiles[0].FullName
-          Write-Host "✅ Found solution file: $solutionFile"
+          Write-Host "Found solution file: $solutionFile"
           echo "SOLUTION_FILE=$solutionFile" >> $env:GITHUB_OUTPUT
           echo "USE_SOLUTION=true" >> $env:GITHUB_OUTPUT
         } else {
@@ -63,11 +63,11 @@ jobs:
           $csprojFiles = Get-ChildItem -Path . -Filter "*.csproj" -Recurse
           if ($csprojFiles.Count -gt 0) {
             $projectFile = $csprojFiles[0].FullName
-            Write-Host "✅ Found project file: $projectFile"
+            Write-Host "Found project file: $projectFile"
             echo "PROJECT_FILE=$projectFile" >> $env:GITHUB_OUTPUT
             echo "USE_SOLUTION=false" >> $env:GITHUB_OUTPUT
           } else {
-            Write-Host "❌ No solution or project files found"
+            Write-Host "No solution or project files found"
             exit 1
           }
         }
@@ -102,11 +102,11 @@ jobs:
         
         # Check for packages folder
         if (Test-Path "packages") {
-          Write-Host "✅ Packages folder found"
+          Write-Host "Packages folder found"
           Get-ChildItem "packages" | Select-Object Name | Format-Table
         }
         
-        Write-Host "✅ NuGet restore completed"
+        Write-Host "NuGet restore completed"
       shell: powershell
 
     - name: Build application
@@ -119,9 +119,9 @@ jobs:
             Write-Host "Building project..."
             msbuild "${{ steps.detect-structure.outputs.PROJECT_FILE }}" /t:Build /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform="Any CPU" /verbosity:minimal
           }
-          Write-Host "✅ Build completed successfully"
+          Write-Host "Build completed successfully"
         } catch {
-          Write-Host "❌ Build failed with error: $_"
+          Write-Host "Build failed with error: $_"
           exit 1
         }
       shell: powershell
@@ -172,15 +172,15 @@ jobs:
               }
             }
             
-            Write-Host "✅ Manual publish completed"
+            Write-Host "Manual publish completed"
             Write-Host "Published files:"
             Get-ChildItem $publishDir -Recurse | Select-Object Name, FullName | Format-Table -AutoSize
           } else {
-            Write-Host "❌ Could not determine web project directory"
+            Write-Host "Could not determine web project directory"
             Write-Host "Will rely on deployment package step to copy files from bin directory"
           }
         } catch {
-          Write-Host "⚠️ Publish step encountered an error: $_"
+          Write-Host "Publish step encountered an error: $_"
           Write-Host "Deployment package step will handle file copying from build output"
         }
       shell: powershell
@@ -189,11 +189,11 @@ jobs:
       run: |
         Write-Host "=== Build Output ==="
         if (Test-Path "bin") {
-          Write-Host "✅ bin folder found"
+          Write-Host "bin folder found"
           Get-ChildItem "bin" -Recurse | Select-Object Name, FullName | Format-Table
         }
         if (Test-Path "publish") {
-          Write-Host "✅ publish folder found"
+          Write-Host "publish folder found"
           Get-ChildItem "publish" -Recurse | Select-Object Name, FullName | Format-Table
         }
         Write-Host "===================="
@@ -266,7 +266,7 @@ jobs:
           }
         }
         
-        Write-Host "✅ Deployment package created"
+        Write-Host "Deployment package created"
         Write-Host "Contents:"
         Get-ChildItem "deploy" -Recurse | Select-Object Name, FullName | Format-Table -AutoSize
       shell: powershell
@@ -350,11 +350,11 @@ jobs:
         $zipName = "descope-dotnet-48-sample-$env:VERSION.zip"
         Compress-Archive -Path "deploy\*" -DestinationPath $zipName
         echo "PACKAGE_NAME=$zipName" >> $env:GITHUB_ENV
-        Write-Host "✅ Created package: $zipName"
+        Write-Host "Created package: $zipName"
         
         # Get package size
         $packageSize = (Get-Item $zipName).length / 1MB
-        Write-Host "📦 Package size: $([math]::Round($packageSize, 2)) MB"
+        Write-Host "Package size: $([math]::Round($packageSize, 2)) MB"
       shell: powershell
 
     - name: Upload build artifacts
@@ -414,7 +414,7 @@ jobs:
         "@$($env:GITHUB_REPOSITORY.Split('/')[0]):registry=https://npm.pkg.github.com" | Out-File ".npmrc" -Encoding ASCII
         "//npm.pkg.github.com/:_authToken=$env:GITHUB_TOKEN" | Add-Content ".npmrc"
         
-        Write-Host "✅ Package manifest created"
+        Write-Host "Package manifest created"
         Write-Host "Package contents:"
         Get-Content "package.json"
       shell: powershell
@@ -433,7 +433,7 @@ jobs:
         
         # Note: GitHub Packages requires authentication and proper API calls
         # This is a placeholder for the actual upload process
-        Write-Host "✅ Package ready for GitHub Packages"
+        Write-Host "Package ready for GitHub Packages"
         Write-Host "Manual upload required or use specific GitHub Packages action"
       shell: powershell
 
@@ -497,19 +497,19 @@ jobs:
       if: always()
       run: |
         Write-Host ""
-        Write-Host "🎉 BUILD SUMMARY"
-        Write-Host "================"
-        Write-Host "📍 Repository: $env:GITHUB_REPOSITORY"
-        Write-Host "🏷️  Version: $env:VERSION"
-        Write-Host "📦 Package: $env:PACKAGE_NAME"
-        Write-Host "🔗 Commit: $env:GITHUB_SHA"
+        Write-Host "BUILD SUMMARY"
+        Write-Host "============="
+        Write-Host "Repository: $env:GITHUB_REPOSITORY"
+        Write-Host "Version: $env:VERSION"
+        Write-Host "Package: $env:PACKAGE_NAME"
+        Write-Host "Commit: $env:GITHUB_SHA"
         Write-Host ""
         if (Test-Path $env:PACKAGE_NAME) {
           $size = (Get-Item $env:PACKAGE_NAME).length / 1MB
-          Write-Host "📊 Package Size: $([math]::Round($size, 2)) MB"
+          Write-Host "Package Size: $([math]::Round($size, 2)) MB"
         }
         Write-Host ""
-        Write-Host "✅ Descope .NET 4.8 Sample App build completed successfully!"
-        Write-Host "🚀 Ready for deployment to IIS"
+        Write-Host "Descope .NET 4.8 Sample App build completed successfully!"
+        Write-Host "Ready for deployment to IIS"
         Write-Host ""
       shell: powershell
