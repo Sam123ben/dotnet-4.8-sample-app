@@ -161,43 +161,6 @@ jobs:
         draft: false
         prerelease: false
 
-    - name: Publish to GitHub Packages
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
-      run: |
-        # Create a simple package.json for npm-style package
-        $packageJson = @{
-          name = "@$($env:GITHUB_REPOSITORY.ToLower().Replace('/', '-'))/simple-calculator"
-          version = ($env:VERSION_TAG -replace '^v', '') -replace '[^0-9\.].*$', ''
-          description = "Simple Calculator - .NET Framework 4.8 Application"
-          main = "SimpleCalculator.exe"
-          repository = @{
-            type = "git"
-            url = "git+https://github.com/$env:GITHUB_REPOSITORY.git"
-          }
-          author = $env:GITHUB_ACTOR
-          license = "MIT"
-          files = @("*")
-        } | ConvertTo-Json -Depth 3
-        
-        $packageJson | Out-File -FilePath "release\package.json" -Encoding UTF8
-        
-        # Configure npm registry
-        echo "@$($env:GITHUB_REPOSITORY_OWNER.ToLower()):registry=https://npm.pkg.github.com" > release\.npmrc
-        echo "//npm.pkg.github.com/:_authToken=${{ secrets.DOTNET_GITHUB_TOKEN }}" >> release\.npmrc
-        
-        # Publish package
-        cd release
-        try {
-          npm publish --access public
-          echo "✅ Package published successfully to GitHub Packages"
-        } catch {
-          echo "⚠️ Package publish failed: $($_.Exception.Message)"
-          echo "This might be due to version conflicts or permissions"
-        }
-      shell: powershell
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.DOTNET_GITHUB_TOKEN }}
-
     - name: Upload to GitHub Packages (Generic)
       if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
       run: |
