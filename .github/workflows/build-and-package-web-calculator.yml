@@ -6,12 +6,12 @@ on:
     tags: [ 'v*' ]
     paths:
       - 'WebCalculator/**'
-      - '.github/workflows/build-web-calculator.yml'
+      - '.github/workflows/build-and-package-web-calculator.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'WebCalculator/**'
-      - '.github/workflows/build-web-calculator.yml'
+      - '.github/workflows/build-and-package-web-calculator.yml'
   workflow_dispatch:
 
 env:
@@ -284,44 +284,6 @@ jobs:
           - Build Configuration: Release
         draft: false
         prerelease: false
-
-    - name: Publish to GitHub Packages
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
-      run: |
-        # Create package.json for npm-style publishing
-        $packageJson = @{
-          name = "@$($env:GITHUB_REPOSITORY.ToLower().Replace('/', '-'))/web-calculator"
-          version = ($env:VERSION_TAG -replace '^v', '') -replace '[^0-9\.].*$', ''
-          description = "Web Calculator - ASP.NET Web Forms Application for IIS"
-          main = "Default.aspx"
-          repository = @{
-            type = "git"
-            url = "git+https://github.com/$env:GITHUB_REPOSITORY.git"
-          }
-          author = $env:GITHUB_ACTOR
-          license = "MIT"
-          keywords = @("calculator", "asp.net", "webforms", "iis", "web-application")
-          files = @("*")
-        } | ConvertTo-Json -Depth 3
-        
-        $packageJson | Out-File -FilePath "deployment\package.json" -Encoding UTF8
-        
-        # Configure npm registry
-        echo "@$($env:GITHUB_REPOSITORY_OWNER.ToLower()):registry=https://npm.pkg.github.com" > deployment\.npmrc
-        echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> deployment\.npmrc
-        
-        # Publish package
-        cd deployment
-        try {
-          npm publish --access public
-          echo "✅ Package published successfully to GitHub Packages"
-        } catch {
-          echo "⚠️ Package publish failed: $($_.Exception.Message)"
-          echo "This might be due to version conflicts or permissions"
-        }
-      shell: powershell
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build Summary
       run: |
