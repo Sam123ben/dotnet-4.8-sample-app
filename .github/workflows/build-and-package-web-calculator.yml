@@ -127,12 +127,12 @@ jobs:
         - .NET Framework 4.8
         - ASP.NET enabled
         "@
-                $info | Out-File "deploy\README.txt" -Encoding UTF8
+        $info | Out-File "deploy\README.txt" -Encoding UTF8
       shell: powershell
 
     - name: Create ZIP package
       run: |
-        $zipName = "${{ env.PROJECT_NAME }}-$env:VERSION.zip"
+        $zipName = "${{ env.PROJECT_NAME }}-IIS-$env:VERSION.zip"
         Compress-Archive -Path "deploy\*" -DestinationPath $zipName
         echo "PACKAGE_NAME=$zipName" >> $env:GITHUB_ENV
         Write-Host "✅ Created package: $zipName"
@@ -141,8 +141,10 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ env.PROJECT_NAME }}-${{ env.VERSION }}
-        path: deploy/
+        name: ${{ env.PROJECT_NAME }}-IIS-${{ env.VERSION }}
+        path: |
+          deploy/
+          ${{ env.PACKAGE_NAME }}
         retention-days: 30
 
     - name: Create Release
@@ -150,64 +152,59 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: ${{ env.PACKAGE_NAME }}
-        name: Web Calculator ${{ env.VERSION }}
+        name: Web Calculator IIS ${{ env.VERSION }}
         body: |
-          ## Web Calculator Release ${{ env.VERSION }}
-          
-          ASP.NET Web Forms calculator application ready for IIS deployment.
-          
+          ## Web Calculator IIS Release ${{ env.VERSION }}
+
+          ASP.NET Web Forms calculator application ready for deployment on IIS.
+
           ### Features
           - Responsive web interface
           - Basic arithmetic operations
           - Professional design
-          - IIS deployment ready
-          
-          ### Quick Deploy
-          1. Download the ZIP file below
-          2. Extract to IIS web directory
-          3. Create IIS Application
-          4. Browse to Default.aspx
-          
+          - Pre-configured for IIS deployment
+
+          ### Deployment Instructions
+          1. Download the `${{ env.PACKAGE_NAME }}` file below
+          2. Extract to your IIS web directory (e.g., `C:\inetpub\wwwroot\WebCalculator`)
+          3. In IIS Manager, create a new Application pointing to the extracted folder
+          4. Set the Application Pool to use .NET Framework 4.8
+          5. Ensure ASP.NET is enabled in IIS
+          6. Browse to `Default.aspx` (e.g., `http://localhost/WebCalculator/Default.aspx`)
+
           ### Requirements
           - Windows Server with IIS
           - .NET Framework 4.8
           - ASP.NET Web Forms enabled
 
+          ### Notes
+          - See `README.txt` in the package for additional details
+          - For support, create an issue in the repository
+        draft: false
+        prerelease: false
+
     - name: Build summary
       run: |
-        Write-Host "## ✅ Build Summary" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "## 🎉 Web Calculator Build Completed Successfully!" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "### 🌐 Application Details" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Project**: ASP.NET Web Forms Calculator" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Framework**: .NET Framework 4.8" >> $env:GITHUB_STEP_SUMMARY
         Write-Host "- **Version**: $env:VERSION" >> $env:GITHUB_STEP_SUMMARY
-        Write-Host "- **Package**: $env:PACKAGE_NAME" >> $env:GITHUB_STEP_SUMMARY
-        Write-Host "- **Status**: Build completed successfully" >> $env:GITHUB_STEP_SUMMARY
-        Write-Host "- **Artifacts**: Available for download" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Build Configuration**: ${{ env.BUILD_CONFIGURATION }}" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **Deployment Package**: ${{ env.PACKAGE_NAME }}" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "### 📦 Available Downloads" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **GitHub Actions Artifacts**: Available for 30 days" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- **IIS Deployment Package**: Ready-to-deploy ZIP file (${{ env.PACKAGE_NAME }})" >> $env:GITHUB_STEP_SUMMARY
+        if ($env:GITHUB_REF -match 'refs/tags/') {
+          Write-Host "- **GitHub Releases**: Permanent release package at ${{ env.PACKAGE_NAME }}" >> $env:GITHUB_STEP_SUMMARY
+        }
+        Write-Host "" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "### 🚀 IIS Deployment Ready!" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "The deployment package includes:" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- Compiled binaries and dependencies" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- Optimized production Web.config" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- Deployment instructions (README.txt)" >> $env:GITHUB_STEP_SUMMARY
+        Write-Host "- Static content (CSS, images, etc.)" >> $env:GITHUB_STEP_SUMMARY
       shell: powershell
-
-    # - name: Build Summary
-    #   run: |
-    #     echo "## 🎉 Web Calculator Build Completed Successfully!" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "### 🌐 Application Details" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- **Project**: ASP.NET Web Forms Calculator" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- **Framework**: .NET Framework ${{ env.DOTNET_FRAMEWORK_VERSION }}" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- **Version**: $env:VERSION_TAG" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- **Build Configuration**: ${{ env.BUILD_CONFIGURATION }}" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- **Deployment Package**: $env:PACKAGE_NAME" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "### 📦 Available Downloads" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- **GitHub Actions Artifacts**: Available for 30 days" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- **IIS Deployment Package**: Ready-to-deploy ZIP file" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- **Source Code Package**: Complete source code" >> $env:GITHUB_STEP_SUMMARY
-    #     if ($env:GITHUB_REF -match 'refs/tags/') {
-    #       echo "- **GitHub Releases**: Permanent release packages" >> $env:GITHUB_STEP_SUMMARY
-    #     }
-    #     if ($env:GITHUB_REF -match 'refs/heads/(main|develop)' -or $env:GITHUB_REF -match 'refs/tags/') {
-    #       echo "- **GitHub Packages**: NPM-style package registry" >> $env:GITHUB_STEP_SUMMARY
-    #     }
-    #     echo "" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "### 🚀 IIS Deployment Ready!" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "The deployment package includes everything needed for IIS:" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- Compiled binaries and dependencies" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- Optimized production web.config" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- Complete deployment instructions" >> $env:GITHUB_STEP_SUMMARY
-    #     echo "- All static content (CSS, images, etc.)" >> $env:GITHUB_STEP_SUMMARY
-    #   shell: powershell
