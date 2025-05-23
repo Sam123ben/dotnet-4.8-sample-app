@@ -6,12 +6,12 @@ on:
     tags: [ 'v*' ]
     paths:
       - 'SimpleCalculatorApp/**'
-      - '.github/workflows/**'
+      - '.github/workflows/build-and-package-web-calculator.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'SimpleCalculatorApp/**'
-      - '.github/workflows/**'
+      - '.github/workflows/build-and-package-web-calculator.yml'
 
 env:
   DOTNET_FRAMEWORK_VERSION: '4.8'
